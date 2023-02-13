@@ -130,8 +130,8 @@ impl Command {
         self.init_trusted_nodes(&mut config);
 
         info!(target: "reth::cli", "Connecting to P2P network");
-        let netconf = self.load_network_config(&config, &db);
-        let network = netconf.start_network().await?;
+        let network_config = self.load_network_config(&config, &db);
+        let network = network_config.start_network().await?;
 
         info!(target: "reth::cli", peer_id = %network.peer_id(), local_addr = %network.local_addr(), "Connected to P2P network");
 
