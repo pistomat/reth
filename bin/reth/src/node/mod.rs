@@ -12,7 +12,12 @@ use eyre::Context;
 use fdlimit::raise_fd_limit;
 use futures::{stream::select as stream_select, Stream, StreamExt};
 use reth_consensus::beacon::BeaconConsensus;
-use reth_db::mdbx::{Env, WriteMap};
+use reth_db::{
+    database::Database,
+    mdbx::{Env, WriteMap},
+    tables,
+    transaction::DbTx,
+};
 use reth_downloaders::{
     bodies::bodies::BodiesDownloaderBuilder,
     headers::reverse_headers::ReverseHeadersDownloaderBuilder,
@@ -40,7 +45,7 @@ use reth_staged_sync::{
 };
 use reth_stages::{
     prelude::*,
-    stages::{ExecutionStage, SenderRecoveryStage, TotalDifficultyStage},
+    stages::{ExecutionStage, SenderRecoveryStage, TotalDifficultyStage, FINISH},
 };
 use std::{io, net::SocketAddr, path::Path, sync::Arc, time::Duration};
 use tracing::{debug, info, warn};
@@ -250,9 +255,27 @@ impl Command {
         config: &Config,
         db: &Arc<Env<WriteMap>>,
     ) -> NetworkConfig<ShareableDatabase<Arc<Env<WriteMap>>>> {
+        let head = db
+            .view(|tx| {
+                // todo: remove unwraps etc
+                let head = FINISH.get_progress(tx).unwrap().unwrap_or_default();
+                let body = tx.get::<tables::Headers>(head).unwrap().unwrap();
+                let total_difficulty = tx.get::<tables::HeaderTD>(head).unwrap().unwrap();
+                let hash = tx.get::<tables::CanonicalHeaders>(head).unwrap().unwrap();
+                let head = Head {
+                    number: head,
+                    hash,
+                    difficulty: body.difficulty,
+                    total_difficulty: total_difficulty.into(),
+                    timestamp: body.timestamp,
+                };
+                head
+            })
+            .unwrap();
+        println!("head: {:?}", head);
         self.network
             .network_config(config, self.chain.clone())
-            .set_head(Head::default())
+            .set_head(head)
             .build(Arc::new(ShareableDatabase::new(db.clone())))
     }
 
