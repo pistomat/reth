@@ -2,7 +2,7 @@ use crate::p2p::{download::DownloadClient, error::PeerRequestResult, priority::P
 use futures::Future;
 pub use reth_eth_wire::BlockHeaders;
 use reth_primitives::{BlockHashOrNumber, Head, Header, HeadersDirection};
-use std::{fmt::Debug, pin::Pin};
+use std::{fmt::Debug, pin::Pin, sync::Arc};
 
 /// The header request struct to be sent to connected peers, which
 /// will proceed to ask them to stream the requested headers to us.
@@ -44,4 +44,14 @@ pub trait HeadersClient: DownloadClient {
 pub trait StatusUpdater: Send + Sync {
     /// Updates the status of the p2p node
     fn update_status(&self, head: Head);
+}
+
+// just a hack to get arc<fileclient> to impl statusupdater
+impl<A> StatusUpdater for Arc<A>
+where
+    A: StatusUpdater + ?Sized,
+{
+    fn update_status(&self, head: Head) {
+        (**self).update_status(head)
+    }
 }

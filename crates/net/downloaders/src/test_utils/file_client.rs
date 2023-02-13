@@ -6,13 +6,13 @@ use reth_interfaces::{
         bodies::client::{BodiesClient, BodiesFut},
         download::DownloadClient,
         error::RequestError,
-        headers::client::{HeadersClient, HeadersFut, HeadersRequest},
+        headers::client::{HeadersClient, HeadersFut, HeadersRequest, StatusUpdater},
         priority::Priority,
     },
     sync::{SyncState, SyncStateProvider, SyncStateUpdater},
 };
 use reth_primitives::{
-    Block, BlockHash, BlockHashOrNumber, BlockNumber, Header, HeadersDirection, PeerId, H256,
+    Block, BlockHash, BlockHashOrNumber, BlockNumber, Head, Header, HeadersDirection, PeerId, H256,
 };
 use reth_rlp::{Decodable, Header as RlpHeader};
 use std::{
@@ -227,6 +227,13 @@ impl SyncStateUpdater for FileClient {
     fn update_sync_state(&self, state: SyncState) {
         let is_syncing = state.is_syncing();
         self.is_syncing.store(is_syncing, Ordering::Relaxed)
+    }
+}
+
+impl StatusUpdater for FileClient {
+    /// Update the status of the node.
+    fn update_status(&self, head: Head) {
+        // noop, doesn't make sense
     }
 }
 

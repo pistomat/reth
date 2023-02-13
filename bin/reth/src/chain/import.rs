@@ -139,24 +139,25 @@ impl ImportCommand {
             .as_task();
 
         let mut pipeline = Pipeline::builder()
-            .with_sync_state_updater(file_client)
+            .with_sync_state_updater(file_client.clone())
             .add_stages(
-                OnlineStages::new(consensus.clone(), header_downloader, body_downloader).set(
-                    TotalDifficultyStage {
-                        chain_spec: self.chain.clone(),
-                        commit_threshold: config.stages.total_difficulty.commit_threshold,
-                    },
-                ),
-            )
-            .add_stages(
-                OfflineStages::default()
-                    .set(SenderRecoveryStage {
-                        commit_threshold: config.stages.sender_recovery.commit_threshold,
-                    })
-                    .set(ExecutionStage {
-                        chain_spec: self.chain.clone(),
-                        commit_threshold: config.stages.execution.commit_threshold,
-                    }),
+                DefaultStages::new(
+                    consensus.clone(),
+                    header_downloader,
+                    body_downloader,
+                    file_client,
+                )
+                .set(TotalDifficultyStage {
+                    chain_spec: self.chain.clone(),
+                    commit_threshold: config.stages.total_difficulty.commit_threshold,
+                })
+                .set(SenderRecoveryStage {
+                    commit_threshold: config.stages.sender_recovery.commit_threshold,
+                })
+                .set(ExecutionStage {
+                    chain_spec: self.chain.clone(),
+                    commit_threshold: config.stages.execution.commit_threshold,
+                }),
             )
             .with_max_block(0)
             .build();
