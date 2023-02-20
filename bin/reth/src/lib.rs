@@ -15,6 +15,7 @@ pub mod dirs;
 pub mod dump_stage;
 pub mod node;
 pub mod p2p;
+pub mod prestate;
 pub mod prometheus_exporter;
 pub mod runner;
 pub mod stage;

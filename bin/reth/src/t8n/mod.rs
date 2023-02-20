@@ -10,7 +10,7 @@ use reth_executor::{
     executor::{test_utils::InMemoryStateProvider, Executor},
     revm_wrap::{State, SubState},
 };
-use reth_primitives::{Block, ChainSpecBuilder, Hardfork, Header, U256};
+use reth_primitives::{Block, ChainSpecBuilder, Hardfork, Header, H256, U256};
 use reth_rpc_types as rpc;
 
 use clap::Parser;
@@ -75,7 +75,7 @@ impl Command {
         let result = executor.execute_transactions(&block, U256::ZERO, None);
 
         // State is committed, so we can try calculating stateroot, txs root etc.
-        dbg!(&result);
+        println!("{:#?}", &result);
 
         Ok(())
     }

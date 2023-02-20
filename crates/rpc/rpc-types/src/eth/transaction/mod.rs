@@ -9,7 +9,7 @@ pub use signature::Signature;
 pub use typed::*;
 
 use reth_primitives::{
-    rpc::transaction::eip2930::AccessListItem, Address, BlockNumber, Bytes,
+    rpc::transaction::eip2930::AccessListItem, Address, BlockNumber, Bytes, ChainId,
     Transaction as PrimitiveTransaction, TransactionKind, TransactionSigned,
     TransactionSignedEcRecovered, TxLegacy, TxType, H256, U128, U256, U64,
 };
@@ -163,7 +163,7 @@ impl Transaction {
 
         let transaction = match self.transaction_type.map(|x| x.as_u64()) {
             None | Some(0) => PrimitiveTransaction::Legacy(TxLegacy {
-                chain_id: self.chain_id.map(|x| x.as_u64()),
+                chain_id: self.chain_id.map(|x| x.as_u64()).or(Some(1)),
                 nonce: self.nonce.to::<u64>(),
                 gas_price: self.gas_price.unwrap_or_default().to::<u128>(),
                 gas_limit: self.gas.to::<u64>(),

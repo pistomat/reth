@@ -4,7 +4,7 @@ use std::str::FromStr;
 use crate::{
     chain, db,
     dirs::{LogsDir, PlatformPath},
-    dump_stage, node, p2p,
+    dump_stage, node, p2p, prestate,
     runner::CliRunner,
     stage, t8n, test_eth_chain, test_vectors,
 };
@@ -32,6 +32,7 @@ pub fn run() -> eyre::Result<()> {
         Commands::Stage(command) => runner.run_until_ctrl_c(command.execute()),
         Commands::DumpStage(command) => runner.run_until_ctrl_c(command.execute()),
         Commands::P2P(command) => runner.run_until_ctrl_c(command.execute()),
+        Commands::Prestate(command) => runner.run_until_ctrl_c(command.execute()),
         Commands::T8n(command) => runner.run_until_ctrl_c(command.execute()),
         Commands::TestVectors(command) => runner.run_until_ctrl_c(command.execute()),
         Commands::TestEthChain(command) => runner.run_until_ctrl_c(command.execute()),
@@ -73,6 +74,8 @@ pub enum Commands {
     /// equivalence of behavior between Geth and Reth executors.
     #[command(name = "t8n")]
     T8n(t8n::Command),
+    #[command(name = "prestate")]
+    Prestate(prestate::Command),
     /// Run Ethereum blockchain tests
     #[command(name = "test-chain")]
     TestEthChain(test_eth_chain::Command),

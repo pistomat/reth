@@ -16,3 +16,5 @@ pub mod execution_result;
 pub mod executor;
 /// Wrapper around revm database and types
 pub mod revm_wrap;
+
+pub use revm::db::{in_memory_db::AccountState, Database};
