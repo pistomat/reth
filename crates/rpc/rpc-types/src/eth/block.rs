@@ -325,6 +325,8 @@ impl<T: Serialize> Serialize for Rich<T> {
 
 #[cfg(test)]
 mod tests {
+    use reth_primitives::MAINNET;
+
     use super::*;
 
     #[test]
@@ -334,5 +336,19 @@ mod tests {
 
         let full = false;
         assert_eq!(BlockTransactionsKind::Hashes, full.into());
+    }
+
+    #[test]
+    fn test_block_serialize() {
+        let header = MAINNET.genesis_header();
+        let block = reth_primitives::Block { header, ..Default::default() };
+        let mut rpc_block =
+            Block::from_block(block, U256::ZERO, BlockTransactionsKind::Hashes, None).unwrap();
+        rpc_block.header.number = Some(U256::from(3000));
+
+        let rich_block: Rich<Block> = rpc_block.clone().into();
+        let serialized = serde_json::to_string(&rich_block).unwrap();
+        println!("{}", serialized);
+        panic!()
     }
 }
