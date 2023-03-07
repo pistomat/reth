@@ -34,6 +34,7 @@ members = [
     "crates/storage/libmdbx-rs",
     "crates/storage/libmdbx-rs/mdbx-sys",
     "crates/storage/provider",
+    "crates/sync-controller",
     "crates/tracing",
     "crates/tasks",
     "crates/transaction-pool",

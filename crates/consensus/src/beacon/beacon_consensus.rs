@@ -1,43 +1,25 @@
 //! Consensus for ethereum network
 use crate::validation;
-use reth_interfaces::consensus::{Consensus, Error, ForkchoiceState};
+use reth_interfaces::consensus::{Consensus, Error};
 use reth_primitives::{ChainSpec, Hardfork, SealedBlock, SealedHeader, EMPTY_OMMER_ROOT, U256};
-use tokio::sync::watch;
-
-use super::BeaconConsensusBuilder;
 
 /// Ethereum beacon consensus
 ///
-/// This consensus engine does basic checks as outlined in the execution specs,
-/// but otherwise defers consensus on what the current chain is to a consensus client.
+/// This consensus engine does basic checks as outlined in the execution specs.
 #[derive(Debug)]
 pub struct BeaconConsensus {
-    /// Watcher over the forkchoice state
-    forkchoice_state_rx: watch::Receiver<ForkchoiceState>,
-    /// Configuration
+    /// Chain specification.
     chain_spec: ChainSpec,
 }
 
 impl BeaconConsensus {
     /// Create a new instance of [BeaconConsensus]
-    pub fn new(
-        chain_spec: ChainSpec,
-        forkchoice_state_rx: watch::Receiver<ForkchoiceState>,
-    ) -> Self {
-        Self { chain_spec, forkchoice_state_rx }
-    }
-
-    /// Create new [BeaconConsensusBuilder].
-    pub fn builder() -> BeaconConsensusBuilder {
-        BeaconConsensusBuilder::default()
+    pub fn new(chain_spec: ChainSpec) -> Self {
+        Self { chain_spec }
     }
 }
 
 impl Consensus for BeaconConsensus {
-    fn fork_choice_state(&self) -> watch::Receiver<ForkchoiceState> {
-        self.forkchoice_state_rx.clone()
-    }
-
     fn pre_validate_header(
         &self,
         header: &SealedHeader,
@@ -96,7 +78,7 @@ mod test {
     #[test]
     fn test_has_block_reward_before_paris() {
         let chain_spec = ChainSpecBuilder::mainnet().build();
-        let (consensus, _) = BeaconConsensus::builder().build(chain_spec);
+        let (consensus, _) = BeaconConsensus::new(chain_spec);
         assert!(consensus.has_block_reward(U256::ZERO, U256::ZERO));
     }
 }

@@ -144,7 +144,7 @@ impl Command {
 
         init_genesis(db.clone(), self.chain.clone())?;
 
-        let (consensus, forkchoice_state_tx) = self.init_consensus()?;
+        let consensus = Arc::new(BeaconConsensus::new(self.chain.clone())) as Arc<dyn Consensus>;
         info!(target: "reth::cli", "Consensus engine initialized");
 
         self.init_trusted_nodes(&mut config);
@@ -169,8 +169,9 @@ impl Command {
             .await?;
         info!(target: "reth::cli", "Started RPC server");
 
-        let engine_api_handle =
-            self.init_engine_api(Arc::clone(&db), forkchoice_state_tx, &ctx.task_executor);
+        // TODO: replace this
+        let (tx, _rx) = watch::channel(ForkchoiceState::default());
+        let engine_api_handle = self.init_engine_api(Arc::clone(&db), tx, &ctx.task_executor);
         info!(target: "reth::cli", "Engine API handler initialized");
 
         let _auth_server = self
@@ -194,6 +195,16 @@ impl Command {
                 &ctx.task_executor,
             )
             .await?;
+
+        if let Some(tip) = self.tip {
+            pipeline.set_tip(tip);
+            debug!(target: "reth::cli", %tip, "Tip manually set");
+        } else {
+            let warn_msg = "No tip specified. \
+                reth cannot communicate with consensus clients, \
+                so a tip must manually be provided for the online stages with --debug.tip <HASH>.";
+            warn!(target: "reth::cli", warn_msg);
+        }
 
         ctx.task_executor.spawn(events::handle_events(Some(network.clone()), events));
 
@@ -287,26 +298,6 @@ impl Command {
         } else {
             Ok(())
         }
-    }
-
-    fn init_consensus(&self) -> eyre::Result<(Arc<dyn Consensus>, watch::Sender<ForkchoiceState>)> {
-        let (consensus, notifier) = BeaconConsensus::builder().build(self.chain.clone());
-
-        if let Some(tip) = self.tip {
-            debug!(target: "reth::cli", %tip, "Tip manually set");
-            notifier.send(ForkchoiceState {
-                head_block_hash: tip,
-                safe_block_hash: tip,
-                finalized_block_hash: tip,
-            })?;
-        } else {
-            let warn_msg = "No tip specified. \
-            reth cannot communicate with consensus clients, \
-            so a tip must manually be provided for the online stages with --debug.tip <HASH>.";
-            warn!(target: "reth::cli", warn_msg);
-        }
-
-        Ok((consensus, notifier))
     }
 
     fn init_engine_api(
@@ -444,23 +435,31 @@ impl Command {
             builder = builder.with_max_block(max_block)
         }
 
+        let (tip_tx, tip_rx) = watch::channel(H256::zero());
         let pipeline = builder
+            .with_tip_sender(tip_tx)
             .with_sync_state_updater(updater.clone())
             .add_stages(
-                DefaultStages::new(consensus.clone(), header_downloader, body_downloader, updater)
-                    .set(TotalDifficultyStage {
-                        chain_spec: self.chain.clone(),
-                        commit_threshold: stage_conf.total_difficulty.commit_threshold,
-                    })
-                    .set(SenderRecoveryStage {
-                        commit_threshold: stage_conf.sender_recovery.commit_threshold,
-                    })
-                    .set({
-                        let mut stage: ExecutionStage<'_, DefaultDB<'_>> =
-                            ExecutionStage::from(self.chain.clone());
-                        stage.commit_threshold = stage_conf.execution.commit_threshold;
-                        stage
-                    }),
+                DefaultStages::new(
+                    tip_rx,
+                    consensus.clone(),
+                    header_downloader,
+                    body_downloader,
+                    updater,
+                )
+                .set(TotalDifficultyStage {
+                    chain_spec: self.chain.clone(),
+                    commit_threshold: stage_conf.total_difficulty.commit_threshold,
+                })
+                .set(SenderRecoveryStage {
+                    commit_threshold: stage_conf.sender_recovery.commit_threshold,
+                })
+                .set({
+                    let mut stage: ExecutionStage<'_, DefaultDB<'_>> =
+                        ExecutionStage::from(self.chain.clone());
+                    stage.commit_threshold = stage_conf.execution.commit_threshold;
+                    stage
+                }),
             )
             .build();
 

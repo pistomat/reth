@@ -1,28 +1,32 @@
-use crate::{error::*, util::opt, ExecInput, ExecOutput, Stage, StageError, StageId, UnwindInput};
-use metrics::Gauge;
+use crate::{error::*, ExecInput, ExecOutput, Stage, StageError, StageId, UnwindInput};
+use futures::Future;
 use reth_db::database::Database;
 use reth_interfaces::sync::{SyncState, SyncStateUpdater};
-use reth_metrics_derive::Metrics;
-use reth_primitives::BlockNumber;
+use reth_primitives::{BlockNumber, H256};
 use reth_provider::Transaction;
 use std::{
-    collections::HashMap,
     fmt::{Debug, Formatter},
     ops::Deref,
+    pin::Pin,
     sync::Arc,
 };
+use tokio::sync::watch;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tracing::*;
 
 mod builder;
 mod ctrl;
 mod event;
+mod progress;
 mod set;
+mod sync_metrics;
 
 pub use builder::*;
 use ctrl::*;
 pub use event::*;
+use progress::*;
 pub use set::*;
+use sync_metrics::*;
 
 #[cfg_attr(doc, aquamarine::aquamarine)]
 /// A staged sync pipeline.
@@ -80,8 +84,13 @@ pub struct Pipeline<DB: Database, U: SyncStateUpdater> {
     listeners: PipelineEventListeners,
     sync_state_updater: Option<U>,
     progress: PipelineProgress,
+    tip_tx: Option<watch::Sender<H256>>,
     metrics: Metrics,
 }
+
+/// TODO:
+pub type PipelineFut<DB, U> =
+    Pin<Box<dyn Future<Output = (Pipeline<DB, U>, Result<(), PipelineError>)>>>;
 
 impl<DB: Database, U: SyncStateUpdater> Default for Pipeline<DB, U> {
     fn default() -> Self {
@@ -92,11 +101,16 @@ impl<DB: Database, U: SyncStateUpdater> Default for Pipeline<DB, U> {
             sync_state_updater: None,
             progress: PipelineProgress::default(),
             metrics: Metrics::default(),
+            tip_tx: None,
         }
     }
 }
 
-impl<DB: Database, U: SyncStateUpdater> Debug for Pipeline<DB, U> {
+impl<DB, U> Debug for Pipeline<DB, U>
+where
+    DB: Database + 'static,
+    U: SyncStateUpdater + 'static,
+{
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Pipeline")
             .field("stages", &self.stages.iter().map(|stage| stage.id()).collect::<Vec<StageId>>())
@@ -105,7 +119,11 @@ impl<DB: Database, U: SyncStateUpdater> Debug for Pipeline<DB, U> {
     }
 }
 
-impl<DB: Database, U: SyncStateUpdater> Pipeline<DB, U> {
+impl<DB, U> Pipeline<DB, U>
+where
+    DB: Database + 'static,
+    U: SyncStateUpdater + 'static,
+{
     /// Construct a pipeline using a [`PipelineBuilder`].
     pub fn builder() -> PipelineBuilder<DB, U> {
         PipelineBuilder::default()
@@ -127,6 +145,19 @@ impl<DB: Database, U: SyncStateUpdater> Pipeline<DB, U> {
                     .unwrap_or_default(),
             );
         }
+    }
+
+    /// Set tip for reverse sync.
+    pub fn set_tip(&self, tip: H256) {
+        self.tip_tx.as_ref().expect("tip sender is set").send(tip).expect("tip channel closed");
+    }
+
+    /// Consume the pipeline and run it. Return the pipeline and its result as a future.
+    pub fn run_as_fut(mut self, db: Arc<DB>) -> PipelineFut<DB, U> {
+        Box::pin(async move {
+            let result = self.run(db).await;
+            (self, result)
+        })
     }
 
     /// Run the pipeline in an infinite loop. Will terminate early if the user has specified
@@ -356,63 +387,6 @@ impl<DB: Database, U: SyncStateUpdater> Pipeline<DB, U> {
                     }
                 }
             }
-        }
-    }
-}
-
-#[derive(Metrics)]
-#[metrics(scope = "sync")]
-struct StageMetrics {
-    /// The block number of the last commit for a stage.
-    checkpoint: Gauge,
-}
-
-#[derive(Default)]
-struct Metrics {
-    checkpoints: HashMap<StageId, StageMetrics>,
-}
-
-impl Metrics {
-    fn stage_checkpoint(&mut self, stage_id: StageId, progress: u64) {
-        self.checkpoints
-            .entry(stage_id)
-            .or_insert_with(|| StageMetrics::new_with_labels(&[("stage", stage_id.to_string())]))
-            .checkpoint
-            .set(progress as f64);
-    }
-}
-
-#[derive(Debug, Default)]
-struct PipelineProgress {
-    /// The progress of the current stage
-    pub(crate) progress: Option<BlockNumber>,
-    /// The maximum progress achieved by any stage during the execution of the pipeline.
-    pub(crate) maximum_progress: Option<BlockNumber>,
-    /// The minimum progress achieved by any stage during the execution of the pipeline.
-    pub(crate) minimum_progress: Option<BlockNumber>,
-}
-
-impl PipelineProgress {
-    fn update(&mut self, progress: BlockNumber) {
-        self.progress = Some(progress);
-        self.minimum_progress = opt::min(self.minimum_progress, progress);
-        self.maximum_progress = opt::max(self.maximum_progress, progress);
-    }
-
-    /// Create a sync state from pipeline progress.
-    fn current_sync_state(&self, downloading: bool) -> SyncState {
-        match self.progress {
-            Some(progress) if downloading => SyncState::Downloading { target_block: progress },
-            Some(progress) => SyncState::Executing { target_block: progress },
-            None => SyncState::Idle,
-        }
-    }
-
-    /// Get next control flow step
-    fn next_ctrl(&self) -> ControlFlow {
-        match self.progress {
-            Some(progress) => ControlFlow::Continue { progress },
-            None => ControlFlow::NoProgress { stage_progress: None },
         }
     }
 }

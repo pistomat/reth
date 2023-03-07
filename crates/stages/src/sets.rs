@@ -45,8 +45,9 @@ use reth_interfaces::{
         headers::{client::StatusUpdater, downloader::HeaderDownloader},
     },
 };
-use reth_primitives::ChainSpec;
+use reth_primitives::{ChainSpec, H256};
 use std::sync::Arc;
+use tokio::sync::watch;
 
 /// A set containing all stages to run a fully syncing instance of reth.
 ///
@@ -66,13 +67,14 @@ pub struct DefaultStages<H, B, S> {
 impl<H, B, S> DefaultStages<H, B, S> {
     /// Create a new set of default stages with default values.
     pub fn new(
+        tip_rx: watch::Receiver<H256>,
         consensus: Arc<dyn Consensus>,
         header_downloader: H,
         body_downloader: B,
         status_updater: S,
     ) -> Self {
         Self {
-            online: OnlineStages::new(consensus, header_downloader, body_downloader),
+            online: OnlineStages::new(tip_rx, consensus, header_downloader, body_downloader),
             status_updater,
         }
     }
@@ -99,6 +101,8 @@ where
 /// themselves offline.
 #[derive(Debug)]
 pub struct OnlineStages<H, B> {
+    /// The tip receiver for the first stage.
+    tip_rx: watch::Receiver<H256>,
     /// The consensus engine used to validate incoming data.
     consensus: Arc<dyn Consensus>,
     /// The block header downloader
@@ -109,8 +113,13 @@ pub struct OnlineStages<H, B> {
 
 impl<H, B> OnlineStages<H, B> {
     /// Create a new set of online stages with default values.
-    pub fn new(consensus: Arc<dyn Consensus>, header_downloader: H, body_downloader: B) -> Self {
-        Self { consensus, header_downloader, body_downloader }
+    pub fn new(
+        tip_rx: watch::Receiver<H256>,
+        consensus: Arc<dyn Consensus>,
+        header_downloader: H,
+        body_downloader: B,
+    ) -> Self {
+        Self { tip_rx, consensus, header_downloader, body_downloader }
     }
 }
 
@@ -122,7 +131,7 @@ where
 {
     fn builder(self) -> StageSetBuilder<DB> {
         StageSetBuilder::default()
-            .add_stage(HeaderStage::new(self.header_downloader, self.consensus.clone()))
+            .add_stage(HeaderStage::new(self.tip_rx, self.header_downloader))
             .add_stage(TotalDifficultyStage::default())
             .add_stage(BodyStage { downloader: self.body_downloader, consensus: self.consensus })
     }

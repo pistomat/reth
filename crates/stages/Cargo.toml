@@ -14,7 +14,7 @@ normal = [
 ]
 
 [dependencies]
-# reth libs
+# reth
 reth-primitives = { path = "../primitives" }
 reth-interfaces = { path = "../interfaces" }
 reth-executor = { path = "../executor" }
@@ -27,8 +27,9 @@ reth-metrics-derive = { path = "../metrics/metrics-derive" }
 # async
 tokio = { version = "1.21.2", features = ["sync"] }
 tokio-stream = "0.1.10"
-async-trait = "0.1.57"
+futures = "0.3"
 futures-util = "0.3.25"
+async-trait = "0.1.57"
 pin-project = "1.0.12"
 
 # observability

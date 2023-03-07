@@ -323,10 +323,6 @@ impl StatusUpdater for TestStatusUpdater {
 
 #[async_trait::async_trait]
 impl Consensus for TestConsensus {
-    fn fork_choice_state(&self) -> watch::Receiver<ForkchoiceState> {
-        self.channel.1.clone()
-    }
-
     fn pre_validate_header(
         &self,
         header: &SealedHeader,

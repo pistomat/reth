@@ -7,13 +7,12 @@ use reth_db::{
     transaction::{DbTx, DbTxMut},
 };
 use reth_interfaces::{
-    consensus::{Consensus, ForkchoiceState},
     p2p::headers::downloader::{HeaderDownloader, SyncTarget},
     provider::ProviderError,
 };
-use reth_primitives::{BlockNumber, SealedHeader};
+use reth_primitives::{BlockNumber, SealedHeader, H256};
 use reth_provider::Transaction;
-use std::sync::Arc;
+use tokio::sync::watch;
 use tracing::*;
 
 /// The [`StageId`] of the headers downloader stage.
@@ -34,10 +33,10 @@ pub const HEADERS: StageId = StageId("Headers");
 /// the stage progress is not updated unless this stage is done.
 #[derive(Debug)]
 pub struct HeaderStage<D: HeaderDownloader> {
+    /// The chain tip receiver.
+    tip_rx: watch::Receiver<H256>,
     /// Strategy for downloading the headers
     downloader: D,
-    /// Consensus client implementation
-    consensus: Arc<dyn Consensus>,
 }
 
 // === impl HeaderStage ===
@@ -47,8 +46,8 @@ where
     D: HeaderDownloader,
 {
     /// Create a new header stage
-    pub fn new(downloader: D, consensus: Arc<dyn Consensus>) -> Self {
-        Self { downloader, consensus }
+    pub fn new(tip_rx: watch::Receiver<H256>, downloader: D) -> Self {
+        Self { tip_rx, downloader }
     }
 
     fn is_stage_done<DB: Database>(
@@ -68,7 +67,7 @@ where
     ///
     /// See also [SyncTarget]
     async fn get_sync_gap<DB: Database>(
-        &self,
+        &mut self,
         tx: &Transaction<'_, DB>,
         stage_progress: u64,
     ) -> Result<SyncGap, StageError> {
@@ -104,21 +103,20 @@ where
         // reverse from there. Else, it should use whatever the forkchoice state reports.
         let target = match next_header {
             Some(header) if stage_progress + 1 != header.number => SyncTarget::Gap(header),
-            None => SyncTarget::Tip(self.next_fork_choice_state().await.head_block_hash),
+            None => SyncTarget::Tip(self.next_tip().await),
             _ => return Err(StageError::StageProgress(stage_progress)),
         };
 
         Ok(SyncGap { local_head, target })
     }
 
-    /// Awaits the next [ForkchoiceState] message from [Consensus] with a non-zero block hash
-    async fn next_fork_choice_state(&self) -> ForkchoiceState {
-        let mut state_rcv = self.consensus.fork_choice_state();
+    /// Awaits the next tip message with a non-zero block hash
+    async fn next_tip(&mut self) -> H256 {
         loop {
-            let _ = state_rcv.changed().await;
-            let forkchoice = state_rcv.borrow();
-            if !forkchoice.head_block_hash.is_zero() {
-                return forkchoice.clone()
+            let _ = self.tip_rx.changed().await;
+            let tip = self.tip_rx.borrow();
+            if !tip.is_zero() {
+                return tip.clone()
             }
         }
     }
