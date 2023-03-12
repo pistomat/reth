@@ -231,6 +231,10 @@ impl EthAccount {
     pub fn from_with_root(acc: Account, storage_root: H256) -> EthAccount {
         Self { storage_root, ..Self::from(acc) }
     }
+
+    pub fn storage_root(&self) -> H256 {
+        self.storage_root
+    }
 }
 
 /// Struct for calculating the root of a merkle patricia tree,
