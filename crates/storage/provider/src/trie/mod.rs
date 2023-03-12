@@ -40,7 +40,7 @@ pub enum TrieError {
 }
 
 /// Database wrapper implementing HashDB trait.
-struct HashDatabase<'tx, 'itx, DB: Database> {
+pub struct HashDatabase<'tx, 'itx, DB: Database> {
     tx: &'tx Transaction<'itx, DB>,
 }
 
@@ -92,7 +92,7 @@ where
 
 impl<'tx, 'itx, DB: Database> HashDatabase<'tx, 'itx, DB> {
     /// Instantiates a new Database for the accounts trie, with an empty root
-    fn new(tx: &'tx Transaction<'itx, DB>) -> Result<Self, TrieError> {
+    pub fn new(tx: &'tx Transaction<'itx, DB>) -> Result<Self, TrieError> {
         let root = EMPTY_ROOT;
         if tx.get::<tables::AccountsTrie>(root)?.is_none() {
             tx.put::<tables::AccountsTrie>(root, [EMPTY_STRING_CODE].to_vec())?;
@@ -101,7 +101,7 @@ impl<'tx, 'itx, DB: Database> HashDatabase<'tx, 'itx, DB> {
     }
 
     /// Instantiates a new Database for the accounts trie, with an existing root
-    fn from_root(tx: &'tx Transaction<'itx, DB>, root: H256) -> Result<Self, TrieError> {
+    pub fn from_root(tx: &'tx Transaction<'itx, DB>, root: H256) -> Result<Self, TrieError> {
         if root == EMPTY_ROOT {
             return Self::new(tx)
         }
@@ -111,7 +111,7 @@ impl<'tx, 'itx, DB: Database> HashDatabase<'tx, 'itx, DB> {
 }
 
 /// Database wrapper implementing HashDB trait.
-struct DupHashDatabase<'tx, 'itx, DB: Database> {
+pub struct DupHashDatabase<'tx, 'itx, DB: Database> {
     tx: &'tx Transaction<'itx, DB>,
     key: H256,
 }
@@ -174,7 +174,7 @@ where
 
 impl<'tx, 'itx, DB: Database> DupHashDatabase<'tx, 'itx, DB> {
     /// Instantiates a new Database for the storage trie, with an empty root
-    fn new(tx: &'tx Transaction<'itx, DB>, key: H256) -> Result<Self, TrieError> {
+    pub fn new(tx: &'tx Transaction<'itx, DB>, key: H256) -> Result<Self, TrieError> {
         let root = EMPTY_ROOT;
         let mut cursor = tx.cursor_dup_write::<tables::StoragesTrie>()?;
         if cursor.seek_by_key_subkey(key, root)?.filter(|entry| entry.hash == root).is_none() {
@@ -187,7 +187,11 @@ impl<'tx, 'itx, DB: Database> DupHashDatabase<'tx, 'itx, DB> {
     }
 
     /// Instantiates a new Database for the storage trie, with an existing root
-    fn from_root(tx: &'tx Transaction<'itx, DB>, key: H256, root: H256) -> Result<Self, TrieError> {
+    pub fn from_root(
+        tx: &'tx Transaction<'itx, DB>,
+        key: H256,
+        root: H256,
+    ) -> Result<Self, TrieError> {
         if root == EMPTY_ROOT {
             return Self::new(tx, key)
         }
@@ -201,7 +205,7 @@ impl<'tx, 'itx, DB: Database> DupHashDatabase<'tx, 'itx, DB> {
 
 /// An Ethereum account, for RLP encoding traits deriving.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default, RlpEncodable, RlpDecodable)]
-pub(crate) struct EthAccount {
+pub struct EthAccount {
     /// Account nonce.
     nonce: u64,
     /// Account balance.
@@ -224,7 +228,7 @@ impl From<Account> for EthAccount {
 }
 
 impl EthAccount {
-    pub(crate) fn from_with_root(acc: Account, storage_root: H256) -> EthAccount {
+    pub fn from_with_root(acc: Account, storage_root: H256) -> EthAccount {
         Self { storage_root, ..Self::from(acc) }
     }
 }
