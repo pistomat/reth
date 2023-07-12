@@ -156,6 +156,13 @@ impl Transaction {
             signed_tx.chain_id(),
         );
 
+        // it should be None for Legacy
+        let transaction_type = match signed_tx.tx_type() {
+            TxType::Legacy => None,
+            TxType::EIP2930 => Some(U64::from(signed_tx.tx_type() as u8)),
+            TxType::EIP1559 => Some(U64::from(signed_tx.tx_type() as u8)),
+        };
+
         Self {
             hash: signed_tx.hash(),
             nonce: U256::from(signed_tx.nonce()),
@@ -170,7 +177,7 @@ impl Transaction {
             input: signed_tx.input().clone(),
             chain_id,
             access_list,
-            transaction_type: Some(U64::from(signed_tx.tx_type() as u8)),
+            transaction_type,
 
             // These fields are set to None because they are not stored as part of the transaction
             block_hash,
