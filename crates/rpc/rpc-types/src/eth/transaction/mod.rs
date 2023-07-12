@@ -189,6 +189,9 @@ impl Transaction {
 
 #[cfg(test)]
 mod tests {
+    use reth_primitives::{TransactionSigned, hex};
+    use reth_rlp::Decodable;
+
     use super::*;
 
     #[test]
@@ -219,5 +222,16 @@ mod tests {
         );
         let deserialized: Transaction = serde_json::from_str(&serialized).unwrap();
         assert_eq!(transaction, deserialized);
+    }
+
+    #[test]
+    fn legacy_transaction() {
+        // random legacy tx: <https://etherscan.io/getRawTx?tx=0xe9e91f1ee4b56c0df2e9f06c2b8c27c6076195a88a7b8537ba8313d80e6f124e>
+        let input = hex::decode("f86e8243eb850df847580082c35094df190dc7190dfba737d7777a163445b7fff161338806113a84987be800801ca03b08715b4403c792b8c7567edea634088bedcd7f60d9352b1f16c69830f3afd5a010b9afb67d2ec8b956f0e1dbc07eb79152904f3a7bf789fc869db56320adfe09").unwrap();
+        let tx = TransactionSigned::decode(&mut &input[..]).unwrap();
+        let recovered = tx.into_ecrecovered().unwrap();
+
+        let transaction = Transaction::from_recovered(recovered);
+        assert_eq!(transaction.transaction_type, None);
     }
 }
