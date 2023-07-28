@@ -220,3 +220,65 @@ fn state_provider_example<T: StateProvider + AccountReader>(provider: T) -> eyre
 
     Ok(())
 }
+
+/// This example shows that opening a database in read-only mode in parallel fails.
+/// 
+/// Steps to reproduce:
+/// 1. Create the test db: `cargo test --package examples --example db-access -- tests::create_db`
+/// 2. Open the test db in read-only mode in parallel: 
+///     - `cargo test --package examples --example db-access -- tests::test_open_db_ro_1 tests::test_open_db_ro_2 tests::test_open_db_ro_3`
+/// 3. Observe that some of the tests fail, depending on racing conditions.
+/// 4. Open the test db with some sleeps:
+///     - `cargo test --package examples --example db-access -- tests::test_open_db_ro_sleep_1 tests::test_open_db_ro_sleep_2 tests::test_open_db_ro_sleep_3`
+/// 5. Observe that all tests pass.
+mod tests {
+    use std::{path::Path, time::Duration};
+
+    use reth_db::{init_db, open_db_read_only};
+    use tokio::time::sleep;
+
+    #[tokio::test]
+    async fn create_db() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdb").join("db");
+        let _db = init_db(&path, None).expect("Failed to create db");
+    }
+
+    #[tokio::test]
+    async fn test_open_db_ro_1() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdb").join("db");
+        let _db = open_db_read_only(&path, None).expect("Failed to open db");
+    }
+
+    #[tokio::test]
+    async fn test_open_db_ro_2() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdb").join("db");
+        let _db = open_db_read_only(&path, None).expect("Failed to open db");
+    }
+
+    #[tokio::test]
+    async fn test_open_db_ro_3() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdb").join("db");
+        let _db = open_db_read_only(&path, None).expect("Failed to open db");
+    }
+
+    #[tokio::test]
+    async fn test_open_db_ro_sleep_1() {
+        let _ = sleep(Duration::from_millis(100)).await;
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdb").join("db");
+        let _db = open_db_read_only(&path, None).expect("Failed to open db");
+    }
+
+    #[tokio::test]
+    async fn test_open_db_ro_sleep_2() {
+        let _ = sleep(Duration::from_millis(200)).await;
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdb").join("db");
+        let _db = open_db_read_only(&path, None).expect("Failed to open db");
+    }
+
+    #[tokio::test]
+    async fn test_open_db_ro_sleep_3() {
+        let _ = sleep(Duration::from_millis(300)).await;
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdb").join("db");
+        let _db = open_db_read_only(&path, None).expect("Failed to open db");
+    }
+}
